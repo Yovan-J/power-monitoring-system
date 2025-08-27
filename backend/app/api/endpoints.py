@@ -44,3 +44,17 @@ def get_campus_cost():
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+# backend/app/api/endpoints.py
+# (Add this new endpoint to the file)
+
+@router.get("/nodes/{node_id}/all-data")
+def get_all_node_data(node_id: str, start: str = "-24h", end: Optional[str] = None):
+    """
+    Retrieves ALL historical sensor data for a specific node for CSV export.
+    """
+    try:
+        data = influx_service.read_all_node_data(node_id=node_id, start=start, end=end)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

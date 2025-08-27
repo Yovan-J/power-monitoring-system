@@ -160,5 +160,43 @@ class InfluxDBService:
                 print(f"Error querying cost for period {period}: {e}")
                 costs[period] = 0
         return costs
+    
+    # backend/services/influx_service.py
+# Add this new method inside the InfluxDBService class
+
+    def read_all_node_data(self, node_id: str, start: str, end: str | None = None):
+        """
+        Reads ALL sensor data for a specific node in a time range (for CSV export).
+        """
+        if not self.query_api:
+            return []
+
+        if start.startswith('-'):
+            start_query = f'start: {start}'
+        else:
+            start_query = f'start: time(v: "{start}")'
+
+        stop_query = f', stop: time(v: "{end}")' if end else ""
+        range_query = f'range({start_query}{stop_query})'
+        
+        flux_query = f'''
+            from(bucket: "{self.bucket}")
+            |> {range_query}
+            |> filter(fn: (r) => r["_measurement"] == "power_measurement")
+            |> filter(fn: (r) => r["node_id"] == "{node_id}")
+            |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+            |> sort(columns: ["_time"], desc: true)
+        '''
+        try:
+            result = self.query_api.query(query=flux_query, org=self.org)
+            records = []
+            for table in result:
+                for record in table.records:
+                    record.values['_time'] = record.values['_time'].isoformat()
+                    records.append(record.values)
+            return records
+        except Exception as e:
+            print(f"Error querying all node data from InfluxDB: {e}")
+            return []
 
 influx_service = InfluxDBService()
