@@ -25,7 +25,6 @@ class InfluxDBService:
 
     def write_sensor_data(self, data: SensorData):
         if not self.write_api:
-            print("Cannot write to InfluxDB: client not initialized.")
             return
         point = (
             influxdb_client.Point("power_measurement")
@@ -43,31 +42,50 @@ class InfluxDBService:
         except Exception as e:
             print(f"Error writing to InfluxDB: {e}")
 
-    def read_sensor_data(self, node_id: str, time_range: str = "-1h"):
+    # --- THIS IS THE CORRECTED METHOD ---
+    def read_sensor_data(self, node_id: str, start: str, end: str | None = None, page: int = 1, limit: int = 100):
         if not self.query_api:
-            print("Cannot read from InfluxDB: client not initialized.")
-            return []
+            return {"total": 0, "page": page, "limit": limit, "data": []}
+
+        offset = (page - 1) * limit
+
+        if start.startswith('-'):
+            start_query = f'start: {start}'
+        else:
+            start_query = f'start: time(v: "{start}")'
+
+        stop_query = f', stop: time(v: "{end}")' if end else ""
+        range_query = f'range({start_query}{stop_query})'
+        
+        # Simplified and corrected Flux query
         flux_query = f'''
             from(bucket: "{self.bucket}")
-            |> range(start: {time_range})
+            |> {range_query}
             |> filter(fn: (r) => r["_measurement"] == "power_measurement")
             |> filter(fn: (r) => r["node_id"] == "{node_id}")
             |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+            |> sort(columns: ["_time"], desc: true)
         '''
+        
         try:
             result = self.query_api.query(query=flux_query, org=self.org)
             records = []
             for table in result:
                 for record in table.records:
+                    record.values['_time'] = record.values['_time'].isoformat()
                     records.append(record.values)
-            return records
+            
+            # Perform pagination in Python after getting all results
+            total_count = len(records)
+            paginated_records = records[offset : offset + limit]
+            
+            return {"total": total_count, "page": page, "limit": limit, "data": paginated_records}
         except Exception as e:
-            print(f"Error querying InfluxDB: {e}")
-            return []
+            print(f"Error querying paginated data from InfluxDB: {e}")
+            return {"total": 0, "page": page, "limit": limit, "data": []}
 
     def get_all_nodes_latest_status(self):
         if not self.query_api:
-            print("Cannot read from InfluxDB: client not initialized.")
             return []
         flux_query = f'''
             from(bucket: "{self.bucket}")
@@ -86,8 +104,6 @@ class InfluxDBService:
                         "node_id": record.values.get("node_id"),
                         "power": record.values.get("power"),
                         "voltage": record.values.get("voltage"),
-                        # --- THIS IS THE FIX ---
-                        # Explicitly format the datetime object to an ISO string with 'Z' for UTC
                         "_time": record_time.isoformat().replace('+00:00', 'Z') if record_time else None
                     }
                     records.append(status)
@@ -95,15 +111,10 @@ class InfluxDBService:
         except Exception as e:
             print(f"Error querying latest statuses from InfluxDB: {e}")
             return []
-    
+
     def get_campus_power_summary(self):
-        """
-        Calculates the total current power consumption across all nodes.
-        """
         if not self.query_api:
             return {"total_power": 0}
-
-        # Flux query to get the last point for each node and sum the power
         flux_query = f'''
             from(bucket: "{self.bucket}")
             |> range(start: -1d)
@@ -122,5 +133,32 @@ class InfluxDBService:
         except Exception as e:
             print(f"Error querying campus summary from InfluxDB: {e}")
             return {"total_power": 0}
+
+    def get_cost_summary(self, tariff_rate: float = 8.0):
+        if not self.query_api:
+            return {"daily": 0, "weekly": 0, "monthly": 0}
+        costs = {}
+        time_periods = {"daily": "-1d", "weekly": "-7d", "monthly": "-30d"}
+        for period, duration in time_periods.items():
+            flux_query = f'''
+                import "math"
+                from(bucket: "{self.bucket}")
+                |> range(start: {duration})
+                |> filter(fn: (r) => r["_measurement"] == "power_measurement")
+                |> filter(fn: (r) => r["_field"] == "power")
+                |> integral(unit: 1s)
+                |> map(fn: (r) => ({{ r with _value: r._value / 3600000.0 }}))
+                |> sum()
+            '''
+            try:
+                result = self.query_api.query(query=flux_query, org=self.org)
+                total_kwh = 0
+                if result and result[0].records:
+                    total_kwh = result[0].records[0].get_value() or 0
+                costs[period] = round(total_kwh * tariff_rate, 2)
+            except Exception as e:
+                print(f"Error querying cost for period {period}: {e}")
+                costs[period] = 0
+        return costs
 
 influx_service = InfluxDBService()
