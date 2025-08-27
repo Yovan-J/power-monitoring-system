@@ -1,0 +1,36 @@
+# backend/requirements.txt
+
+# Core FastAPI and web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Database drivers
+influxdb-client==1.38.0
+asyncpg>=0.29.0
+sqlalchemy[asyncio]==2.0.23
+
+# MQTT and IoT communication
+paho-mqtt==1.6.1
+
+# Authentication and security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Data processing and validation
+pydantic==2.9.0
+pandas>=2.2.0
+numpy>=1.26.0
+
+# Utilities
+python-dotenv==1.0.0
+asyncio-mqtt==0.16.1
+
+# Development and testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+
+# Optional: Redis for caching
+redis==5.0.1
+aioredis==2.0.1
