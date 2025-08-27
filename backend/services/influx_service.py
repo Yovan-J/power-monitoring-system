@@ -38,12 +38,14 @@ class InfluxDBService:
         )
         try:
             self.write_api.write(bucket=self.bucket, org=self.org, record=point)
-            print(f"Successfully wrote data for node {data.node_id} to InfluxDB.")
         except Exception as e:
             print(f"Error writing to InfluxDB: {e}")
 
-    # --- THIS IS THE CORRECTED METHOD ---
-    def read_sensor_data(self, node_id: str, start: str, end: str | None = None, page: int = 1, limit: int = 100):
+    # --- THIS IS THE FINAL CORRECTED METHOD ---
+    def read_sensor_data(self, node_id: str, start: str, end: str | None = None, page: int = 1, limit: int = 10):
+        """
+        Reads sensor data for a specific node and correctly paginates the result.
+        """
         if not self.query_api:
             return {"total": 0, "page": page, "limit": limit, "data": []}
 
@@ -57,7 +59,7 @@ class InfluxDBService:
         stop_query = f', stop: time(v: "{end}")' if end else ""
         range_query = f'range({start_query}{stop_query})'
         
-        # Simplified and corrected Flux query
+        # This single query fetches all records within the specified time range
         flux_query = f'''
             from(bucket: "{self.bucket}")
             |> {range_query}
@@ -68,18 +70,18 @@ class InfluxDBService:
         '''
         
         try:
-            result = self.query_api.query(query=flux_query, org=self.org)
-            records = []
-            for table in result:
+            result_tables = self.query_api.query(query=flux_query, org=self.org)
+            all_records = []
+            for table in result_tables:
                 for record in table.records:
                     record.values['_time'] = record.values['_time'].isoformat()
-                    records.append(record.values)
+                    all_records.append(record.values)
             
-            # Perform pagination in Python after getting all results
-            total_count = len(records)
-            paginated_records = records[offset : offset + limit]
+            # Perform counting and pagination in Python for reliability
+            total_count = len(all_records)
+            paginated_data = all_records[offset : offset + limit]
             
-            return {"total": total_count, "page": page, "limit": limit, "data": paginated_records}
+            return {"total": total_count, "page": page, "limit": limit, "data": paginated_data}
         except Exception as e:
             print(f"Error querying paginated data from InfluxDB: {e}")
             return {"total": 0, "page": page, "limit": limit, "data": []}
@@ -101,9 +103,9 @@ class InfluxDBService:
                 for record in table.records:
                     record_time = record.values.get("_time")
                     status = {
-                        "node_id": record.values.get("node_id"),
-                        "power": record.values.get("power"),
-                        "voltage": record.values.get("voltage"),
+                        "node_id": record.values.get("node_id"), "power": record.values.get("power"),
+                        "voltage": record.values.get("voltage"), "current": record.values.get("current"),
+                        "power_factor": record.values.get("power_factor"), "frequency": record.values.get("frequency"),
                         "_time": record_time.isoformat().replace('+00:00', 'Z') if record_time else None
                     }
                     records.append(status)
@@ -120,15 +122,11 @@ class InfluxDBService:
             |> range(start: -1d)
             |> filter(fn: (r) => r["_measurement"] == "power_measurement")
             |> filter(fn: (r) => r["_field"] == "power")
-            |> last()
-            |> group() 
-            |> sum(column: "_value")
+            |> last() |> group() |> sum(column: "_value")
         '''
         try:
             result = self.query_api.query(query=flux_query, org=self.org)
-            total_power = 0
-            if result and result[0].records:
-                total_power = result[0].records[0].get_value()
+            total_power = result[0].records[0].get_value() if result and result[0].records else 0
             return {"total_power": total_power or 0}
         except Exception as e:
             print(f"Error querying campus summary from InfluxDB: {e}")
@@ -152,32 +150,28 @@ class InfluxDBService:
             '''
             try:
                 result = self.query_api.query(query=flux_query, org=self.org)
-                total_kwh = 0
-                if result and result[0].records:
-                    total_kwh = result[0].records[0].get_value() or 0
+                total_kwh = result[0].records[0].get_value() or 0 if result and result[0].records else 0
                 costs[period] = round(total_kwh * tariff_rate, 2)
             except Exception as e:
                 print(f"Error querying cost for period {period}: {e}")
                 costs[period] = 0
         return costs
     
-    # backend/services/influx_service.py
-# Add this new method inside the InfluxDBService class
-
-    def read_all_node_data(self, node_id: str, start: str, end: str | None = None):
-        """
-        Reads ALL sensor data for a specific node in a time range (for CSV export).
-        """
+    def read_all_node_data(self, node_id: str, start: str, end: str | None = None, since: str | None = None):
         if not self.query_api:
             return []
-
-        if start.startswith('-'):
+        if since:
+            range_query = f'range(start: time(v: "{since}"))'
+        elif start == "all":
+            range_query = 'range(start: 0)'
+        elif start.startswith('-'):
             start_query = f'start: {start}'
+            stop_query = f', stop: time(v: "{end}")' if end else ""
+            range_query = f'range({start_query}{stop_query})'
         else:
             start_query = f'start: time(v: "{start}")'
-
-        stop_query = f', stop: time(v: "{end}")' if end else ""
-        range_query = f'range({start_query}{stop_query})'
+            stop_query = f', stop: time(v: "{end}")' if end else ""
+            range_query = f'range({start_query}{stop_query})'
         
         flux_query = f'''
             from(bucket: "{self.bucket}")
@@ -185,7 +179,7 @@ class InfluxDBService:
             |> filter(fn: (r) => r["_measurement"] == "power_measurement")
             |> filter(fn: (r) => r["node_id"] == "{node_id}")
             |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
-            |> sort(columns: ["_time"], desc: true)
+            |> sort(columns: ["_time"], desc: false)
         '''
         try:
             result = self.query_api.query(query=flux_query, org=self.org)

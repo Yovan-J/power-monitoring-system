@@ -40,7 +40,7 @@ export function Dashboard() {
   return (
     <div className="space-y-8">
       <CampusSummary allNodeStatus={allNodeStatus} />
-      <CostSummary />
+      
       <div>
         <h2 className="text-2xl font-semibold mb-4 text-slate-700 dark:text-slate-300">Live Node Status</h2>
         {statusLoading && <p>Loading statuses...</p>}
@@ -58,32 +58,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* --- THIS SECTION IS UPDATED --- */}
-      <div>
-        <div className="mb-4">
-          <label className="block text-lg font-medium mb-2 text-slate-700 dark:text-slate-300">Select Node for Live Graph:</label>
-          {/* Pill Button Selector */}
-          <div className="flex flex-wrap gap-2">
-            {nodeOptions.map(node => {
-                const isActive = selectedNode === node;
-                return (
-                    <button
-                        key={node}
-                        onClick={() => setSelectedNode(node)}
-                        className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors duration-200
-                        ${isActive
-                            ? 'bg-indigo-600 text-white shadow'
-                            : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
-                        }`}
-                    >
-                        {node.replace('_SIM_', ' ')}
-                    </button>
-                )
-            })}
-          </div>
-        </div>
-        <LiveChart selectedNode={selectedNode} />
-      </div>
+      
     </div>
   );
 }

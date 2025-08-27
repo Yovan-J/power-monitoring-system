@@ -1,4 +1,5 @@
 # backend/app/api/endpoints.py
+# (Only the /all-data endpoint is changed)
 
 from fastapi import APIRouter, HTTPException
 from typing import Optional
@@ -6,15 +7,13 @@ from ...services.influx_service import influx_service
 
 router = APIRouter()
 
+# ... (other endpoints remain the same) ...
 @router.get("/")
 def read_root():
     return {"status": "ok", "message": "Power Monitoring API is running!"}
 
 @router.get("/nodes/{node_id}/data")
 def get_node_data(node_id: str, start: str = "-1h", end: Optional[str] = None, page: int = 1, limit: int = 10):
-    """
-    Retrieves paginated historical sensor data for a specific node.
-    """
     try:
         data = influx_service.read_sensor_data(node_id=node_id, start=start, end=end, page=page, limit=limit)
         return data
@@ -44,17 +43,16 @@ def get_campus_cost():
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-# backend/app/api/endpoints.py
-# (Add this new endpoint to the file)
 
+# --- THIS ENDPOINT IS UPDATED TO ACCEPT A 'since' PARAMETER ---
 @router.get("/nodes/{node_id}/all-data")
-def get_all_node_data(node_id: str, start: str = "-24h", end: Optional[str] = None):
+def get_all_node_data(node_id: str, start: str = "-24h", end: Optional[str] = None, since: Optional[str] = None):
     """
-    Retrieves ALL historical sensor data for a specific node for CSV export.
+    Retrieves ALL historical sensor data for a specific node for CSV export
+    or for fetching incremental updates via the 'since' parameter.
     """
     try:
-        data = influx_service.read_all_node_data(node_id=node_id, start=start, end=end)
+        data = influx_service.read_all_node_data(node_id=node_id, start=start, end=end, since=since)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

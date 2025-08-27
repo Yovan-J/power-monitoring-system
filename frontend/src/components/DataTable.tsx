@@ -1,19 +1,14 @@
 // frontend/src/components/DataTable.tsx
+import { Pagination } from './Pagination';
+
 type SensorData = {
-  _time: string;
-  power?: number;
-  current?: number;
-  voltage?: number;
-  power_factor?: number;
-  frequency?: number;
+  _time: string; power?: number; current?: number; voltage?: number;
+  power_factor?: number; frequency?: number;
 };
 
 type DataTableProps = {
-  data: SensorData[];
-  totalRecords: number;
-  page: number;
-  limit: number;
-  onPageChange: (newPage: number) => void;
+  data: SensorData[]; totalRecords: number; page: number;
+  limit: number; onPageChange: (newPage: number) => void;
 };
 
 export function DataTable({ data, totalRecords, page, limit, onPageChange }: DataTableProps) {
@@ -47,24 +42,13 @@ export function DataTable({ data, totalRecords, page, limit, onPageChange }: Dat
       </div>
       <div className="flex items-center justify-between mt-4">
         <span className="text-sm text-slate-600 dark:text-slate-400">
-          Page {page} of {totalPages} ({totalRecords} records)
+          Showing {data.length} of {totalRecords} records
         </span>
-        <div className="flex gap-2">
-          <button
-            onClick={() => onPageChange(page - 1)}
-            disabled={page <= 1}
-            className="px-3 py-1 bg-slate-200 dark:bg-slate-700 rounded-md disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => onPageChange(page + 1)}
-            disabled={page >= totalPages}
-            className="px-3 py-1 bg-slate-200 dark:bg-slate-700 rounded-md disabled:opacity-50"
-          >
-            Next
-          </button>
-        </div>
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={onPageChange}
+        />
       </div>
     </div>
   );
